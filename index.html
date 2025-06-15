@@ -171,6 +171,20 @@
             background-color: #f9f9f9;
         }
         
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        
+        .error {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+        
+        .success {
+            color: #2e7d32;
+        }
+        
         @media (max-width: 768px) {
             .main-content {
                 flex-direction: column;
@@ -247,31 +261,35 @@
             <div id="card-preview"></div>
             
             <div class="dictionary-container">
-                <h3>Google Dictionary</h3>
+                <h3>Dictionary Translator</h3>
                 <div class="dictionary-boxes">
-                    <div class="dictionary-box">
-                        <label for="bn-word">Bangla Word</label>
-                        <input type="text" id="bn-word" placeholder="বাংলা শব্দ লিখুন">
-                    </div>
                     <div class="dictionary-box">
                         <label for="en-word">English Word</label>
                         <input type="text" id="en-word" placeholder="Enter English word">
                     </div>
+                    <div class="dictionary-box">
+                        <label for="bn-word">Bangla Word</label>
+                        <input type="text" id="bn-word" placeholder="বাংলা শব্দ লিখুন">
+                    </div>
                 </div>
-                <div class="dictionary-result" id="dictionary-result"></div>
+                <div class="dictionary-result" id="dictionary-result">
+                    Translation will appear here...
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script>
-        // Google Dictionary API integration
+        // Dictionary translation functionality
         const bnInput = document.getElementById('bn-word');
         const enInput = document.getElementById('en-word');
         const resultDiv = document.getElementById('dictionary-result');
         
+        let isTranslating = false;
+        
         // Debounce function to limit API calls
-        function debounce(func, timeout = 500){
+        function debounce(func, timeout = 800) {
             let timer;
             return (...args) => {
                 clearTimeout(timer);
@@ -279,47 +297,87 @@
             };
         }
         
-        // Translate function using Google API
-        async function translateText(text, targetLang) {
+        // Translate function using MyMemory API (free and reliable)
+        async function translateText(text, sourceLang, targetLang) {
+            if (!text.trim()) return '';
+            
             try {
-                const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
+                const response = await fetch(
+                    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`
+                );
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
-                return data[0][0][0];
+                
+                if (data.responseStatus === 200 && data.responseData) {
+                    return data.responseData.translatedText;
+                } else {
+                    throw new Error('Translation failed');
+                }
             } catch (error) {
                 console.error("Translation error:", error);
-                return "Translation failed";
+                throw error;
             }
         }
         
         // Handle Bangla input
-        bnInput.addEventListener('input', debounce(async (e) => {
-            if(bnInput.value.trim() === "") {
+        const handleBanglaInput = debounce(async (e) => {
+            if (isTranslating) return;
+            
+            const bnText = bnInput.value.trim();
+            
+            if (bnText === "") {
                 enInput.value = "";
-                resultDiv.textContent = "";
+                resultDiv.innerHTML = "Translation will appear here...";
                 return;
             }
             
-            if(bnInput.value) {
-                const translation = await translateText(bnInput.value, 'en');
+            isTranslating = true;
+            resultDiv.innerHTML = '<span class="loading">Translating...</span>';
+            
+            try {
+                const translation = await translateText(bnText, 'bn', 'en');
                 enInput.value = translation;
-                resultDiv.textContent = ` ${bnInput.value} → ${translation}`;
+                resultDiv.innerHTML = `<span class="success">${bnText} → ${translation}</span>`;
+            } catch (error) {
+                resultDiv.innerHTML = '<span class="error">Translation failed. Please try again.</span>';
+            } finally {
+                isTranslating = false;
             }
-        }));
+        });
         
         // Handle English input
-        enInput.addEventListener('input', debounce(async (e) => {
-            if(enInput.value.trim() === "") {
+        const handleEnglishInput = debounce(async (e) => {
+            if (isTranslating) return;
+            
+            const enText = enInput.value.trim();
+            
+            if (enText === "") {
                 bnInput.value = "";
-                resultDiv.textContent = "";
+                resultDiv.innerHTML = "Translation will appear here...";
                 return;
             }
             
-            if(enInput.value) {
-                const translation = await translateText(enInput.value, 'bn');
+            isTranslating = true;
+            resultDiv.innerHTML = '<span class="loading">Translating...</span>';
+            
+            try {
+                const translation = await translateText(enText, 'en', 'bn');
                 bnInput.value = translation;
-                resultDiv.textContent = ` ${enInput.value} →  ${translation}`;
+                resultDiv.innerHTML = `<span class="success">${enText} → ${translation}</span>`;
+            } catch (error) {
+                resultDiv.innerHTML = '<span class="error">Translation failed. Please try again.</span>';
+            } finally {
+                isTranslating = false;
             }
-        }));
+        });
+        
+        // Add event listeners
+        bnInput.addEventListener('input', handleBanglaInput);
+        enInput.addEventListener('input', handleEnglishInput);
         
         // Card preview functionality
         const inputs = [
@@ -359,11 +417,11 @@
             
             preview.innerHTML = `
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: grey;">
-                    <div style="color: skyblue; font-size: ${wordSize}px; margin-bottom: 20px; text-align: center;">${englishWord}</div>
+                    <div style="color: skyblue; font-size: ${wordSize}px; margin-bottom: 20px; text-align: center; font-family: 'Tiro Bangla', serif;">${englishWord}</div>
                     <div style="width: 80%; height: 2px; background-color: black; margin: 10px 0;"></div>
-                    <div style="color: orange; font-size: ${pronunciationSize}px; margin-bottom: 20px; text-align: center;">${pronunciation}</div>
+                    <div style="color: orange; font-size: ${pronunciationSize}px; margin-bottom: 20px; text-align: center; font-family: 'Tiro Bangla', serif;">${pronunciation}</div>
                     <div style="width: 80%; height: 2px; background-color: black; margin: 10px 0;"></div>
-                    <div style="color: lightgreen; font-size: ${meaningSize}px; text-align: center;">${meaning}</div>
+                    <div style="color: lightgreen; font-size: ${meaningSize}px; text-align: center; font-family: 'Tiro Bangla', serif;">${meaning}</div>
                 </div>
             `;
         }
@@ -380,6 +438,7 @@
             updatePreview();
         });
         
+        // Generate image functionality
         document.getElementById('generate-btn').addEventListener('click', function() {
             const width = document.getElementById('width').value;
             const height = document.getElementById('height').value;
@@ -399,23 +458,32 @@
             tempDiv.style.position = 'absolute';
             tempDiv.style.left = '-9999px';
             tempDiv.style.backgroundColor = 'grey';
+            tempDiv.style.fontFamily = "'Tiro Bangla', serif";
             document.body.appendChild(tempDiv);
             
             tempDiv.innerHTML = `
                 <div style="width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: grey;">
-                    <div style="color: skyblue; font-size: ${wordSize}px; margin-bottom: 20px; text-align: center;">${englishWord}</div>
+                    <div style="color: skyblue; font-size: ${wordSize}px; margin-bottom: 20px; text-align: center; font-family: 'Tiro Bangla', serif;">${englishWord}</div>
                     <div style="width: 80%; height: 2px; background-color: black; margin: 10px 0;"></div>
-                    <div style="color: orange; font-size: ${pronunciationSize}px; margin-bottom: 20px; text-align: center;">${pronunciation}</div>
+                    <div style="color: orange; font-size: ${pronunciationSize}px; margin-bottom: 20px; text-align: center; font-family: 'Tiro Bangla', serif;">${pronunciation}</div>
                     <div style="width: 80%; height: 2px; background-color: black; margin: 10px 0;"></div>
-                    <div style="color: lightgreen; font-size: ${meaningSize}px; text-align: center;">${meaning}</div>
+                    <div style="color: lightgreen; font-size: ${meaningSize}px; text-align: center; font-family: 'Tiro Bangla', serif;">${meaning}</div>
                 </div>
             `;
             
-            html2canvas(tempDiv).then(canvas => {
+            html2canvas(tempDiv, {
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: 'grey'
+            }).then(canvas => {
                 const link = document.createElement('a');
                 link.download = 'word-card.png';
-                link.href = canvas.toDataURL('image/png');
+                link.href = canvas.toDataURL('image/png', 1.0);
                 link.click();
+                document.body.removeChild(tempDiv);
+            }).catch(error => {
+                console.error('Error generating image:', error);
+                alert('Image generation failed. Please try again.');
                 document.body.removeChild(tempDiv);
             });
         });
